@@ -39,6 +39,6 @@ chrome.runtime.onMessage.addListener((message) => {
         if (!player) {
             player = initPlayer(message.play.playlist, KGM_MIRRORS);
         }
-        player.isPlaying ? player.stop() : player.play();
+        player.isPlaying || player.isLoading ? player.stop() : player.play();
     }
 });
