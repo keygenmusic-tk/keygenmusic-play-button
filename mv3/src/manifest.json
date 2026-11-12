@@ -15,6 +15,7 @@
     "type": "module"
   },
   "action": {
+    "default_title": "__MSG_p_defaultTitle__",
     "default_icon": {
       "16": "images/16.png",
       "48": "images/48.png",

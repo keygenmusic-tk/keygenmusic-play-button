@@ -15,7 +15,7 @@ const updateTotalPlayedBadge = async () => {
     const storage = await chrome.storage.local.get({[STORAGE_NAME.TOTAL_PLAYED]: 0});
     const totalPlayedMsec = storage[STORAGE_NAME.TOTAL_PLAYED];
     if (!totalPlayedMsec) {
-        chrome.i18n.getMessage('p_defaultTitle');
+        await chrome.action.setTitle({title: chrome.i18n.getMessage('p_defaultTitle')});
         return;
     }
     const totalPlayedHuman = humanTime(totalPlayedMsec);
