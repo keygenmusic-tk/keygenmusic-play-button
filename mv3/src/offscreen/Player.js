@@ -10,7 +10,8 @@ export class Player extends EventTarget {
     #playlist = [];
     #mirrors = [];
     #curPlaylistPos = 0;
-    #startTime = 0;
+    #listeningStartedAt = null;
+    #playedMsec = 0;
     #curMirrorIndex;
     #lastWorkingMirrorIndex;
     #mirrorAttempts = 0;
@@ -36,6 +37,7 @@ export class Player extends EventTarget {
         const controller = new AbortController();
         this.#playbackController = controller;
         this.isLoading = true;
+        this.#pauseListeningTime();
         this.#audio.pause();
 
         const playlistElement = this.#playlist[this.#curPlaylistPos];
@@ -67,21 +69,39 @@ export class Player extends EventTarget {
             this.isPlaying = true;
             this.#lastWorkingMirrorIndex = this.#curMirrorIndex;
             this.#mirrorAttempts = 0;
-            const now = Date.now();
+            this.#startListeningTime();
             this.dispatchEvent(new CustomEvent('play', {
                 detail: {
                     info: playlistElement.st,
                     mirror: this.#mirrors[this.#curMirrorIndex],
-                    playedMsec: this.#startTime ? now - this.#startTime : 0,
+                    playedMsec: this.#takePlayedTime(),
                 },
             }));
-            this.#startTime = now;
         } catch (e) {
             if (this.#playbackController !== controller) return;
             this.#tryNextMirror();
         } finally {
             clearTimeout(timeoutId);
         }
+    }
+
+    #startListeningTime() {
+        if (this.#listeningStartedAt !== null || !this.#playbackController || this.isLoading
+            || this.#audio.paused || this.#audio.ended || this.#audio.readyState < 3) return;
+        this.#listeningStartedAt = performance.now();
+    }
+
+    #pauseListeningTime() {
+        if (this.#listeningStartedAt === null) return;
+        this.#playedMsec += performance.now() - this.#listeningStartedAt;
+        this.#listeningStartedAt = null;
+    }
+
+    #takePlayedTime() {
+        // Report completed listening intervals once, retaining them across mirror retries.
+        const playedMsec = this.#playedMsec;
+        this.#playedMsec = 0;
+        return playedMsec;
     }
 
     #tryNextMirror() {
@@ -98,16 +118,16 @@ export class Player extends EventTarget {
         this.#playbackController?.abort();
         this.#playbackController = null;
         this.isLoading = false;
+        this.#pauseListeningTime();
         this.#audio.pause();
         this.isPlaying = false;
         this.#curMirrorIndex = this.#lastWorkingMirrorIndex;
         this.#mirrorAttempts = 0;
         this.dispatchEvent(new CustomEvent('stop', {
             detail: {
-                playedMsec: this.#startTime ? Date.now() - this.#startTime : 0,
+                playedMsec: this.#takePlayedTime(),
             },
         }));
-        this.#startTime = 0;
         this.#initPlaylist();
     }
 
@@ -133,10 +153,18 @@ export class Player extends EventTarget {
     }
 
     #listenAudioEvents() {
+        this.#audio.addEventListener('playing', () => this.#startListeningTime());
+        this.#audio.addEventListener('waiting', () => this.#pauseListeningTime());
+        this.#audio.addEventListener('pause', () => {
+            // A queued pause event may arrive after a newer playback has started.
+            if (this.#audio.paused) this.#pauseListeningTime();
+        });
         this.#audio.addEventListener('ended', () => {
+            this.#pauseListeningTime();
             if (this.isPlaying) this.next();
         });
         this.#audio.addEventListener('error', () => {
+            this.#pauseListeningTime();
             // During startup, play() rejects on media errors. Handle that once in #play().
             if (!this.#playbackController || this.isLoading) return;
             this.#tryNextMirror();

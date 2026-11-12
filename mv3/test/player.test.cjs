@@ -17,8 +17,11 @@ const createPlayer = ({play, fetch} = {}) => {
     const events = [];
     let nextTimerId = 0;
     let playCount = 0;
+    let now = 1000;
     let audio;
     class Audio extends EventTarget {
+        readyState = 4;
+        ended = false;
         constructor() {
             super();
             audio = this;
@@ -32,6 +35,8 @@ const createPlayer = ({play, fetch} = {}) => {
     const context = vm.createContext({
         Audio, EventTarget, Event, CustomEvent, AbortController, DOMException,
         navigator: {},
+        Date: {now: () => now},
+        performance: {now: () => now},
         setTimeout: (callback, delay) => {
             const id = ++nextTimerId;
             timers.set(id, {callback, delay});
@@ -58,11 +63,13 @@ const createPlayer = ({play, fetch} = {}) => {
     }
     return {
         player, audio, requests, events, timers,
+        advanceTime: msec => { now += msec; },
         expireTimer: async delay => {
             assert.equal(timers.size, 1);
             const [id, timer] = timers.entries().next().value;
             assert.equal(timer.delay, delay);
             timers.delete(id);
+            now += delay;
             timer.callback();
             await flush();
         },
@@ -179,4 +186,94 @@ test('media errors after startup still fall back to another mirror', async () =>
     assert.equal(h.events[1].mirror, 'https://second/');
     assert.equal(h.player.isPlaying, true);
     assert.equal(h.timers.size, 0);
+});
+
+test('track transitions exclude loading time and report each listening interval once', async () => {
+    const pending = deferred();
+    const h = createPlayer({play: count => count === 2 ? pending.promise : Promise.resolve()});
+    await h.player.play();
+    h.advanceTime(10000);
+    h.audio.dispatchEvent(new Event('ended'));
+    await flush();
+    h.advanceTime(5000);
+    pending.resolve();
+    await flush();
+    assert.equal(h.events[1].playedMsec, 10000);
+    h.advanceTime(2000);
+    h.player.stop();
+    assert.equal(h.events[2].playedMsec, 2000);
+    h.player.stop();
+    assert.equal(h.events[3].playedMsec, 0);
+});
+
+test('stopping during next-track loading preserves prior playback without counting the wait', async () => {
+    const h = createPlayer({play: count => count === 2 ? new Promise(() => {}) : Promise.resolve()});
+    await h.player.play();
+    h.advanceTime(10000);
+    h.player.next();
+    await flush();
+    h.advanceTime(5000);
+    h.player.stop();
+    await flush();
+    assert.equal(h.events.at(-1).playedMsec, 10000);
+});
+
+test('buffering gaps are excluded and repeated media events do not duplicate time', async () => {
+    const h = createPlayer();
+    await h.player.play();
+    h.advanceTime(10000);
+    h.audio.readyState = 2;
+    h.audio.dispatchEvent(new Event('waiting'));
+    h.advanceTime(20000);
+    h.audio.dispatchEvent(new Event('waiting'));
+    h.audio.readyState = 4;
+    h.audio.dispatchEvent(new Event('playing'));
+    h.advanceTime(3000);
+    h.audio.dispatchEvent(new Event('playing'));
+    h.advanceTime(2000);
+    h.player.stop();
+    assert.equal(h.events.at(-1).playedMsec, 15000);
+});
+
+test('pauses exclude silence while network stalls with buffered audio still count', async () => {
+    const h = createPlayer();
+    await h.player.play();
+    h.advanceTime(5000);
+    h.audio.pause();
+    h.audio.dispatchEvent(new Event('pause'));
+    h.advanceTime(20000);
+    await h.audio.play();
+    h.audio.dispatchEvent(new Event('playing'));
+    // Ignore an old pause notification now that audio has resumed.
+    h.audio.dispatchEvent(new Event('pause'));
+    h.audio.dispatchEvent(new Event('stalled'));
+    h.advanceTime(5000);
+    h.player.stop();
+    assert.equal(h.events.at(-1).playedMsec, 10000);
+});
+
+test('mirror exhaustion retains listening time and excludes all retry delays', async () => {
+    const h = createPlayer({play: count => count === 1 ? Promise.resolve() : new Promise(() => {})});
+    await h.player.play();
+    h.advanceTime(10000);
+    h.player.next();
+    await flush();
+    await h.expireTimer(10000);
+    await h.expireTimer(10000);
+    assert.equal(h.events.at(-1).type, 'stop');
+    assert.equal(h.events.at(-1).playedMsec, 10000);
+});
+
+test('initial loading and cancelled startup never contribute listening time', async () => {
+    const h = createPlayer({play: () => new Promise(() => {})});
+    h.player.play();
+    await flush();
+    h.advanceTime(5000);
+    h.player.stop();
+    // Late playback notifications after cancellation must not restart accounting.
+    h.audio.dispatchEvent(new Event('playing'));
+    h.advanceTime(5000);
+    h.player.stop();
+    assert.deepEqual(h.events.map(event => event.playedMsec), [0, 0]);
+    await flush();
 });
