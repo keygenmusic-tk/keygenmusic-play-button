@@ -14,6 +14,5 @@ const extName = filenamify(name, {replacement: '_'});
 const zipName = `${extName}-v${version}.zip`;
 const zipPath = path.join(RELEASE_DIR, zipName);
 
-zl.archiveFolder(DIST_DIR, zipPath)
-        .then(() => console.log(`Release zip created - ${zipPath}`))
-        .catch(console.log);
+await zl.archiveFolder(DIST_DIR, zipPath);
+console.log(`Release zip created - ${zipPath}`);
