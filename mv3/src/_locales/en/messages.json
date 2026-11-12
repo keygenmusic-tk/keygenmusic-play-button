@@ -29,5 +29,8 @@
   },
   "p_nowPlaying": {
     "message": "Now Playing:"
+  },
+  "p_loading": {
+    "message": "Loading:"
   }
 }

@@ -14,6 +14,7 @@ const createPlayer = ({play, fetch} = {}) => {
     const timers = new Map();
     const requests = [];
     const events = [];
+    const states = [];
     let nextTimerId = 0;
     let playCount = 0;
     let now = 1000;
@@ -60,8 +61,9 @@ const createPlayer = ({play, fetch} = {}) => {
     for (const type of ['play', 'stop']) {
         player.addEventListener(type, event => events.push({type, ...event.detail}));
     }
+    player.addEventListener('statechange', event => states.push({...event.detail}));
     return {
-        player, audio, requests, events, timers,
+        player, audio, requests, events, states, timers,
         advanceTime: msec => { now += msec; },
         expireTimer: async delay => {
             assert.equal(timers.size, 1);
@@ -234,18 +236,35 @@ test('buffering gaps are excluded and repeated media events do not duplicate tim
     assert.equal(h.events.at(-1).playedMsec, 15000);
 });
 
-test('pauses exclude silence while network stalls with buffered audio still count', async () => {
+test('unexpected native pauses stop the player and preserve listening time once', async () => {
     const h = createPlayer();
     await h.player.play();
     h.advanceTime(5000);
     h.audio.pause();
     h.audio.dispatchEvent(new Event('pause'));
+    assert.equal(h.player.isPlaying, false);
+    assert.equal(h.player.isLoading, false);
+    assert.equal(h.events.at(-1).type, 'stop');
+    assert.equal(h.events.at(-1).playedMsec, 5000);
     h.advanceTime(20000);
-    await h.audio.play();
     h.audio.dispatchEvent(new Event('playing'));
-    // Ignore an old pause notification now that audio has resumed.
+    h.audio.dispatchEvent(new Event('pause'));
+    assert.equal(h.events.length, 2);
+    assert.equal(h.states.length, 1);
+    // A subsequent toolbar start begins a fresh listening interval.
+    await h.player.play();
+    h.advanceTime(2000);
+    h.player.stop();
+    assert.equal(h.events.at(-1).playedMsec, 2000);
+});
+
+test('stale pause notifications and network stalls do not stop buffered playback', async () => {
+    const h = createPlayer();
+    await h.player.play();
+    h.advanceTime(5000);
     h.audio.dispatchEvent(new Event('pause'));
     h.audio.dispatchEvent(new Event('stalled'));
+    assert.equal(h.player.isPlaying, true);
     h.advanceTime(5000);
     h.player.stop();
     assert.equal(h.events.at(-1).playedMsec, 10000);
@@ -275,4 +294,68 @@ test('initial loading and cancelled startup never contribute listening time', as
     h.player.stop();
     assert.deepEqual(h.events.map(event => event.playedMsec), [0, 0]);
     await flush();
+});
+
+test('buffering and resuming emit toolbar updates without duplicate play or statistics events', async () => {
+    const h = createPlayer();
+    await h.player.play();
+    h.advanceTime(5000);
+    h.audio.readyState = 2;
+    h.audio.dispatchEvent(new Event('waiting'));
+    h.audio.dispatchEvent(new Event('waiting'));
+    h.advanceTime(20000);
+    h.audio.readyState = 4;
+    h.audio.dispatchEvent(new Event('playing'));
+    h.audio.dispatchEvent(new Event('playing'));
+    assert.deepEqual(h.states, [
+        {state: 'loading', info: 'Track'},
+        {state: 'loading', info: 'Track'},
+        {state: 'playing', info: 'Track'},
+    ]);
+    assert.equal(h.events.length, 1);
+    h.advanceTime(5000);
+    h.player.stop();
+    assert.equal(h.events.at(-1).playedMsec, 10000);
+});
+
+test('stopping while buffering ignores late media notifications', async () => {
+    const h = createPlayer();
+    await h.player.play();
+    h.audio.readyState = 2;
+    h.audio.dispatchEvent(new Event('waiting'));
+    h.player.stop();
+    h.audio.readyState = 4;
+    h.audio.dispatchEvent(new Event('playing'));
+    h.audio.dispatchEvent(new Event('waiting'));
+    assert.equal(h.events.at(-1).type, 'stop');
+    assert.equal(h.player.isPlaying, false);
+    assert.equal(h.states.length, 2);
+});
+
+test('internal pause events during track changes do not cancel the new track', async () => {
+    const pending = deferred();
+    const h = createPlayer({fetch: count => count === 2 ? pending.promise : Promise.resolve({ok: true})});
+    await h.player.play();
+    h.player.next();
+    assert.equal(h.audio.paused, true);
+    h.audio.dispatchEvent(new Event('pause'));
+    pending.resolve({ok: true});
+    await flush();
+    assert.equal(h.player.isPlaying, true);
+    assert.equal(h.events.length, 2);
+    assert.equal(h.events[1].type, 'play');
+});
+
+test('the native pause at the end of a track does not prevent automatic next-track playback', async () => {
+    const h = createPlayer();
+    await h.player.play();
+    h.audio.ended = true;
+    h.audio.pause();
+    h.audio.dispatchEvent(new Event('pause'));
+    h.audio.dispatchEvent(new Event('ended'));
+    h.audio.ended = false;
+    await flush();
+    assert.equal(h.events.length, 2);
+    assert.equal(h.events[1].type, 'play');
+    assert.equal(h.player.isPlaying, true);
 });

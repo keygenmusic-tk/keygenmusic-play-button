@@ -72,6 +72,7 @@ const play = (playedMsec = 0) => ({
     data: {mirror: 'https://static.kgm.pp.ua/mp3/', info: 'Track', playedMsec},
 });
 const stop = playedMsec => ({cmd: 'STOP', data: {playedMsec}});
+const playbackState = state => ({cmd: 'PLAYBACK_STATE', data: {state, info: 'Track'}});
 
 test('a delayed PLAY cannot overwrite a newer STOP', async () => {
     const mirrorGate = deferred();
@@ -115,4 +116,41 @@ test('startup tooltip initialization cannot overwrite playback', async () => {
     await bg.flush();
     assert.equal(bg.toolbar.title, 'p_nowPlaying\nTrack');
     assert.equal(bg.toolbar.badge, ' ▶');
+});
+
+test('buffering and resume update the toolbar without adding listening time', async () => {
+    const bg = createBackground();
+    bg.send(play(1000));
+    bg.send(playbackState('loading'));
+    await bg.flush();
+    assert.equal(bg.toolbar.badge, '...');
+    assert.equal(bg.toolbar.title, 'p_loading\nTrack');
+    assert.equal(bg.local.TOTAL_PLAYED, 1000);
+    bg.send(playbackState('playing'));
+    await bg.flush();
+    assert.equal(bg.toolbar.badge, ' ▶');
+    assert.equal(bg.toolbar.title, 'p_nowPlaying\nTrack');
+    assert.equal(bg.local.TOTAL_PLAYED, 1000);
+});
+
+test('a delayed PLAY cannot overwrite a newer buffering update', async () => {
+    const mirrorGate = deferred();
+    const bg = createBackground({mirrorGate});
+    bg.send(play());
+    await bg.mirrorWriteStarted.promise;
+    bg.send(playbackState('loading'));
+    mirrorGate.resolve();
+    await bg.flush();
+    assert.equal(bg.toolbar.badge, '...');
+    assert.equal(bg.toolbar.title, 'p_loading\nTrack');
+});
+
+test('stopping after a buffering notification clears the loading badge', async () => {
+    const bg = createBackground();
+    bg.send(playbackState('loading'));
+    bg.send(stop(1000));
+    await bg.flush();
+    assert.equal(bg.toolbar.badge, '');
+    assert.equal(bg.toolbar.title, 'p_totalPlayed 0p_hour 0p_min');
+    assert.equal(bg.local.TOTAL_PLAYED, 1000);
 });

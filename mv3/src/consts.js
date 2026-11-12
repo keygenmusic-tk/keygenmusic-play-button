@@ -1,6 +1,7 @@
 export const MSG_CMD = {
     'PLAY': 'PLAY',
     'STOP': 'STOP',
+    'PLAYBACK_STATE': 'PLAYBACK_STATE',
 };
 
 export const ALARM_UPD_PLAYLIST = 'ALARM_UPD_PLAYLIST';

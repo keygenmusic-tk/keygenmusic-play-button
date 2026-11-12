@@ -10,6 +10,9 @@ let player;
 
 const initPlayer = (playlist, mirrors, preferredMirror) => {
     const pl = new Player(playlist, mirrors, preferredMirror);
+    pl.addEventListener('statechange', (e) => {
+        chrome.runtime.sendMessage({cmd: MSG_CMD.PLAYBACK_STATE, data: e.detail});
+    });
     pl.addEventListener('play', (e) => {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({

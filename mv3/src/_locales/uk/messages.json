@@ -29,5 +29,8 @@
   },
   "p_nowPlaying": {
     "message": "Зараз грає:"
+  },
+  "p_loading": {
+    "message": "Завантаження:"
   }
 }

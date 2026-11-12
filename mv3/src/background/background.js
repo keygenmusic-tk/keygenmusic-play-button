@@ -52,18 +52,22 @@ chrome.action.onClicked.addListener(async () => {
     }
 });
 
+const updatePlaybackBadge = async (state, info) => {
+    await chrome.action.setBadgeTextColor({color: '#e94545'});
+    await chrome.action.setBadgeBackgroundColor({color: '#A9B7C6'});
+    await chrome.action.setBadgeText({text: state === 'playing' ? ' \u25B6' : '...'});
+    await chrome.action.setTitle({
+        title: chrome.i18n.getMessage(state === 'playing' ? 'p_nowPlaying' : 'p_loading') + '\n' + info,
+    });
+};
+
 const handlePlaybackMessage = async (message) => {
     switch (message.cmd) {
         case MSG_CMD.PLAY:
             if (KGM_MIRRORS.includes(message.data.mirror)) {
                 await chrome.storage.session.set({[STORAGE_NAME.LAST_WORKING_MIRROR]: message.data.mirror});
             }
-            await chrome.action.setBadgeTextColor({color: '#e94545'});
-            await chrome.action.setBadgeBackgroundColor({color: '#A9B7C6'});
-            await chrome.action.setBadgeText({text: ' \u25B6'});
-            await chrome.action.setTitle({
-                title: chrome.i18n.getMessage('p_nowPlaying') + '\n' + message.data.info,
-            });
+            await updatePlaybackBadge('playing', message.data.info);
             await updateTotalPlayed(message.data.playedMsec);
             break;
 
@@ -71,6 +75,12 @@ const handlePlaybackMessage = async (message) => {
             await chrome.action.setBadgeText({text: ''});
             await updateTotalPlayed(message.data.playedMsec);
             await updateTotalPlayedBadge(message.data.playedMsec);
+            break;
+
+        case MSG_CMD.PLAYBACK_STATE:
+            if (message.data.state === 'loading' || message.data.state === 'playing') {
+                await updatePlaybackBadge(message.data.state, message.data.info);
+            }
             break;
     }
 };
@@ -88,7 +98,7 @@ let playbackUpdates = updateBadgeOnStartup()
     .catch(err => console.log('Error updating startup badge', err));
 
 chrome.runtime.onMessage.addListener((message) => {
-    if (message.cmd !== MSG_CMD.PLAY && message.cmd !== MSG_CMD.STOP) return;
+    if (![MSG_CMD.PLAY, MSG_CMD.STOP, MSG_CMD.PLAYBACK_STATE].includes(message.cmd)) return;
     playbackUpdates = playbackUpdates
         .then(() => handlePlaybackMessage(message))
         // Recover the queue so a failed update does not block later messages.
