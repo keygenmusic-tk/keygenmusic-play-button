@@ -1,5 +1,6 @@
 import {KGM_MIRRORS} from '../consts';
 
+const PLAYLIST_TIMEOUT_MS = 10000;
 
 export const fetchAndUpdateList = async () => {
     let mirrorIndex = 0;
@@ -7,11 +8,10 @@ export const fetchAndUpdateList = async () => {
     while (mirrorIndex < KGM_MIRRORS.length) {
         try {
             const playlistUrl = KGM_MIRRORS[mirrorIndex] + 'playlist.txt';
-            await fetch(playlistUrl, {
-                method: 'HEAD',
-                signal: AbortSignal.timeout(2000),
+            const resp = await fetch(playlistUrl, {
+                signal: AbortSignal.timeout(PLAYLIST_TIMEOUT_MS),
             });
-            const resp = await fetch(playlistUrl);
+            if (!resp.ok) throw new Error('Playlist request failed: ' + resp.status);
             const list = await resp.json();
             if (!list?.length) throw new Error('Invalid list');
             await chrome.storage.local.set({list});
