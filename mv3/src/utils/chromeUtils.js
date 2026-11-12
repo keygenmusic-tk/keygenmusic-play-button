@@ -22,8 +22,11 @@ export async function setupOffscreenDocument(path) {
             reasons: ['AUDIO_PLAYBACK'],
             justification: 'Playing Audio In Background',
         });
-        await creating;
-        creating = null;
+        try {
+            await creating;
+        } finally {
+            creating = null;
+        }
     }
 }
 
