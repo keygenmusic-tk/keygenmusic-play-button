@@ -128,7 +128,6 @@ export class Player extends EventTarget {
             // try to play from another mirror
             this.#mirrorAttempts++;
             if (this.#mirrorAttempts >= this.#mirrors.length) {
-                this.#startTime = 0;
                 this.stop();
             } else {
                 this.#curMirrorIndex = (this.#curMirrorIndex + 1) % this.#mirrors.length;
