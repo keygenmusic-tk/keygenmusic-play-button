@@ -9,7 +9,7 @@ import {readFileSync, unlinkSync, writeFileSync} from 'node:fs';
     const files = await glob('dist/**/*.+(css|js)');
     files.forEach(file => {
         const data = readFileSync(file, {encoding: 'utf8'});
-        const res = data.replace(/\/[*|\/]# sourceMappingURL=.+\n/, '');
+        const res = data.replace(/\/[*|/]# sourceMappingURL=.+\n/, '');
         writeFileSync(file, res);
     });
 })();
