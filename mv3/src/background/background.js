@@ -1,4 +1,4 @@
-import {ALARM_UPD_PLAYLIST, MSG_CMD, STORAGE_NAME} from '../consts';
+import {ALARM_UPD_PLAYLIST, KGM_MIRRORS, MSG_CMD, STORAGE_NAME} from '../consts';
 import {enableAlarm, setupOffscreenDocument} from '../utils/chromeUtils';
 import {humanTime} from '../utils/utils';
 import {fetchAndUpdateList, getPlaylist} from './playlist';
@@ -40,9 +40,13 @@ chrome.alarms.onAlarm.addListener(alarm => {
 
 chrome.action.onClicked.addListener(async () => {
     try {
-        const playlist = await getPlaylist();
+        const [playlist, storage] = await Promise.all([
+            getPlaylist(),
+            chrome.storage.session.get(STORAGE_NAME.LAST_WORKING_MIRROR),
+        ]);
+        const preferredMirror = storage[STORAGE_NAME.LAST_WORKING_MIRROR];
         await setupOffscreenDocument('offscreen/offscreen.html');
-        await chrome.runtime.sendMessage({play: {playlist}});
+        await chrome.runtime.sendMessage({play: {playlist, preferredMirror}});
     } catch (err) {
         console.log('Error during getting playlist', err);
     }
@@ -51,6 +55,9 @@ chrome.action.onClicked.addListener(async () => {
 chrome.runtime.onMessage.addListener(async (message) => {
     switch (message.cmd) {
         case MSG_CMD.PLAY:
+            if (KGM_MIRRORS.includes(message.data.mirror)) {
+                await chrome.storage.session.set({[STORAGE_NAME.LAST_WORKING_MIRROR]: message.data.mirror});
+            }
             await chrome.action.setBadgeTextColor({color: '#e94545'});
             await chrome.action.setBadgeBackgroundColor({color: '#A9B7C6'});
             await chrome.action.setBadgeText({text: ' \u25B6'});

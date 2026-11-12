@@ -9,18 +9,27 @@ export class Player extends EventTarget {
     #mirrors = [];
     #curPlaylistPos = 0;
     #startTime = 0;
-    #curMirrorIndex = 0;
+    #curMirrorIndex;
+    #lastWorkingMirrorIndex;
+    #mirrorAttempts = 0;
     #playbackController;
 
-    constructor(playlist, mirrors) {
+    constructor(playlist, mirrors, preferredMirror) {
         super();
         this.#mirrors = mirrors;
+        this.#curMirrorIndex = Math.max(0, mirrors.indexOf(preferredMirror));
+        this.#lastWorkingMirrorIndex = this.#curMirrorIndex;
         this.#playlist = playlist;
         this.#initPlaylist();
         this.#listenAudioEvents();
     }
 
-    async play() {
+    play() {
+        this.#mirrorAttempts = 0;
+        return this.#play();
+    }
+
+    async #play() {
         this.#playbackController?.abort();
         const controller = new AbortController();
         this.#playbackController = controller;
@@ -54,10 +63,13 @@ export class Player extends EventTarget {
             if (this.#playbackController !== controller) return;
             this.isLoading = false;
             this.isPlaying = true;
+            this.#lastWorkingMirrorIndex = this.#curMirrorIndex;
+            this.#mirrorAttempts = 0;
             const now = Date.now();
             this.dispatchEvent(new CustomEvent('play', {
                 detail: {
                     info: playlistElement.st,
+                    mirror: this.#mirrors[this.#curMirrorIndex],
                     playedMsec: this.#startTime ? now - this.#startTime : 0,
                 },
             }));
@@ -75,6 +87,8 @@ export class Player extends EventTarget {
         this.isLoading = false;
         this.#audio.pause();
         this.isPlaying = false;
+        this.#curMirrorIndex = this.#lastWorkingMirrorIndex;
+        this.#mirrorAttempts = 0;
         this.dispatchEvent(new CustomEvent('stop', {
             detail: {
                 playedMsec: this.#startTime ? Date.now() - this.#startTime : 0,
@@ -112,12 +126,13 @@ export class Player extends EventTarget {
         this.#audio.addEventListener('error', () => {
             if (!this.#playbackController) return;
             // try to play from another mirror
-            if (this.#curMirrorIndex >= this.#mirrors.length - 1) {
+            this.#mirrorAttempts++;
+            if (this.#mirrorAttempts >= this.#mirrors.length) {
                 this.#startTime = 0;
                 this.stop();
             } else {
-                this.#curMirrorIndex++;
-                this.play();
+                this.#curMirrorIndex = (this.#curMirrorIndex + 1) % this.#mirrors.length;
+                this.#play();
             }
         });
         if ('mediaSession' in navigator) {

@@ -8,8 +8,8 @@ import {Player} from './Player';
  */
 let player;
 
-const initPlayer = (playlist, mirrors) => {
-    const pl = new Player(playlist, mirrors);
+const initPlayer = (playlist, mirrors, preferredMirror) => {
+    const pl = new Player(playlist, mirrors, preferredMirror);
     pl.addEventListener('play', (e) => {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
@@ -22,7 +22,7 @@ const initPlayer = (playlist, mirrors) => {
         }
         chrome.runtime.sendMessage({
             cmd: MSG_CMD.PLAY,
-            data: {info: e.detail.info, playedMsec: e.detail.playedMsec},
+            data: {info: e.detail.info, mirror: e.detail.mirror, playedMsec: e.detail.playedMsec},
         });
     });
     pl.addEventListener('stop', (e) => {
@@ -37,7 +37,7 @@ const initPlayer = (playlist, mirrors) => {
 chrome.runtime.onMessage.addListener((message) => {
     if ('play' in message) {
         if (!player) {
-            player = initPlayer(message.play.playlist, KGM_MIRRORS);
+            player = initPlayer(message.play.playlist, KGM_MIRRORS, message.play.preferredMirror);
         }
         player.isPlaying || player.isLoading ? player.stop() : player.play();
     }

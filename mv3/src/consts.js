@@ -7,6 +7,7 @@ export const ALARM_UPD_PLAYLIST = 'ALARM_UPD_PLAYLIST';
 
 export const STORAGE_NAME = {
     'TOTAL_PLAYED': 'TOTAL_PLAYED',
+    'LAST_WORKING_MIRROR': 'LAST_WORKING_MIRROR',
 };
 
 export const KGM_MIRRORS = [
