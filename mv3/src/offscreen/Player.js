@@ -1,5 +1,7 @@
 import {shuffleArray} from '../utils/utils';
 
+const MIRROR_CHECK_TIMEOUT_MS = 3000;
+const AUDIO_START_TIMEOUT_MS = 10000;
 
 export class Player extends EventTarget {
     isPlaying = false;
@@ -38,28 +40,28 @@ export class Player extends EventTarget {
 
         const playlistElement = this.#playlist[this.#curPlaylistPos];
         const trackUrl = this.#mirrors[this.#curMirrorIndex] + playlistElement.p;
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        let timeoutId = setTimeout(() => controller.abort(), MIRROR_CHECK_TIMEOUT_MS);
+        // Aborting fetch alone cannot cancel a pending audio.play() promise.
+        const aborted = new Promise((resolve, reject) => {
+            controller.signal.addEventListener('abort', () => {
+                reject(new DOMException('Playback cancelled or timed out', 'AbortError'));
+            }, {once: true});
+        });
 
         try {
-            // check if mirror response. if no, dispatch an error event to try next mirror
-            // without this will have to wait until timeout error will be fired by play function. it could take too long
-            await fetch(trackUrl, {
+            const response = await Promise.race([fetch(trackUrl, {
                 method: 'HEAD',
                 signal: controller.signal,
-            });
-        } catch (e) {
-            if (this.#playbackController !== controller) return;
-            this.#audio.dispatchEvent(new Event('error'));
-            return;
-        } finally {
-            clearTimeout(timeoutId);
-        }
+            }), aborted]);
+            if (!response.ok) throw new Error('Mirror request failed: ' + response.status);
 
-        // Ignore results from playback that has been stopped or replaced.
-        if (this.#playbackController !== controller) return;
-        this.#audio.src = trackUrl;
-        try {
-            await this.#audio.play();
+            // Ignore results from playback that has been stopped or replaced.
+            if (this.#playbackController !== controller) return;
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => controller.abort(), AUDIO_START_TIMEOUT_MS);
+
+            this.#audio.src = trackUrl;
+            await Promise.race([this.#audio.play(), aborted]);
             if (this.#playbackController !== controller) return;
             this.isLoading = false;
             this.isPlaying = true;
@@ -76,8 +78,19 @@ export class Player extends EventTarget {
             this.#startTime = now;
         } catch (e) {
             if (this.#playbackController !== controller) return;
-            this.isLoading = false;
-            console.log('Error playing', e);
+            this.#tryNextMirror();
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
+    #tryNextMirror() {
+        this.#mirrorAttempts++;
+        if (this.#mirrorAttempts >= this.#mirrors.length) {
+            this.stop();
+        } else {
+            this.#curMirrorIndex = (this.#curMirrorIndex + 1) % this.#mirrors.length;
+            this.#play();
         }
     }
 
@@ -124,15 +137,9 @@ export class Player extends EventTarget {
             if (this.isPlaying) this.next();
         });
         this.#audio.addEventListener('error', () => {
-            if (!this.#playbackController) return;
-            // try to play from another mirror
-            this.#mirrorAttempts++;
-            if (this.#mirrorAttempts >= this.#mirrors.length) {
-                this.stop();
-            } else {
-                this.#curMirrorIndex = (this.#curMirrorIndex + 1) % this.#mirrors.length;
-                this.#play();
-            }
+            // During startup, play() rejects on media errors. Handle that once in #play().
+            if (!this.#playbackController || this.isLoading) return;
+            this.#tryNextMirror();
         });
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
