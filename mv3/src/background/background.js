@@ -52,7 +52,7 @@ chrome.action.onClicked.addListener(async () => {
     }
 });
 
-chrome.runtime.onMessage.addListener(async (message) => {
+const handlePlaybackMessage = async (message) => {
     switch (message.cmd) {
         case MSG_CMD.PLAY:
             if (KGM_MIRRORS.includes(message.data.mirror)) {
@@ -73,7 +73,7 @@ chrome.runtime.onMessage.addListener(async (message) => {
             await updateTotalPlayedBadge(message.data.playedMsec);
             break;
     }
-});
+};
 
 // to avoid updating badge every time when sw wake up (possible during playing)
 const updateBadgeOnStartup = async () => {
@@ -83,4 +83,14 @@ const updateBadgeOnStartup = async () => {
     await chrome.storage.session.set({flag: 1});
 };
 
-updateBadgeOnStartup();
+// Keep startup and playback updates in order, including storage read-modify-writes.
+let playbackUpdates = updateBadgeOnStartup()
+    .catch(err => console.log('Error updating startup badge', err));
+
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.cmd !== MSG_CMD.PLAY && message.cmd !== MSG_CMD.STOP) return;
+    playbackUpdates = playbackUpdates
+        .then(() => handlePlaybackMessage(message))
+        // Recover the queue so a failed update does not block later messages.
+        .catch(err => console.log('Error updating playback state', err));
+});
