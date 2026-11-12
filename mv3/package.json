@@ -4,7 +4,7 @@
   "description": "Extension for playing awesome chiptune from keygenmusic.tk",
   "scripts": {
     "start": "parcel watch src/manifest.json src/offscreen/offscreen.html --host localhost",
-    "test": "node --test test/*.test.cjs",
+    "test": "node --test test/*.test.mjs",
     "prebuild": "rimraf dist .parcel-cache",
     "build": "parcel build src/manifest.json src/offscreen/offscreen.html --no-cache",
     "postbuild": "node utils/remove-source-maps.mjs && node utils/create-zip.mjs",

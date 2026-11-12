@@ -1,8 +1,7 @@
-const assert = require('node:assert/strict');
-const {readFileSync} = require('node:fs');
-const path = require('node:path');
-const {test} = require('node:test');
-const vm = require('node:vm');
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {test} from 'node:test';
+import vm from 'node:vm';
 
 const deferred = () => {
     let resolve;
@@ -56,7 +55,7 @@ const createBackground = ({startupGate, mirrorGate, failMirrorWrite = false} = {
     });
     // Load the source without its bundler-resolved imports; use real constants/helpers.
     for (const file of ['consts.js', 'utils/utils.js', 'background/background.js']) {
-        const source = readFileSync(path.join(__dirname, '../src', file), 'utf8')
+        const source = readFileSync(new URL('../src/' + file, import.meta.url), 'utf8')
             .replace(/^import .*;\r?\n/gm, '')
             .replace(/^export /gm, '');
         vm.runInContext(source, context, {filename: file});

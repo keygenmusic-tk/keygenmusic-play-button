@@ -1,8 +1,7 @@
-const assert = require('node:assert/strict');
-const {readFileSync} = require('node:fs');
-const path = require('node:path');
-const {test} = require('node:test');
-const vm = require('node:vm');
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {test} from 'node:test';
+import vm from 'node:vm';
 
 const validList = [
     {p: '!Others/Track 120%25.mp3', st: 'Track 120%'},
@@ -38,7 +37,7 @@ const createPlaylist = ({cached = null, responses = [validList]} = {}) => {
         },
     });
     for (const file of ['consts.js', 'background/playlist.js']) {
-        const source = readFileSync(path.join(__dirname, '../src', file), 'utf8')
+        const source = readFileSync(new URL('../src/' + file, import.meta.url), 'utf8')
             .replace(/^import .*;\r?\n/gm, '')
             .replace(/^export /gm, '');
         vm.runInContext(source, context, {filename: file});
