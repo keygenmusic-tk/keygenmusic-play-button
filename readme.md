@@ -1,5 +1,5 @@
-Chrome, Opera, and Firefox Extension for playing awesome chiptune from keygenmusic.tk
-------------------------------------------------------------------------------------
+Chrome, Edge, Opera, and Firefox Extension for playing awesome chiptune from keygenmusic.tk
+-------------------------------------------------------------------------------------------
 
 ![](https://raw.githubusercontent.com/onikienko/keygenjukebox-play-button/master/chromium/img/ext_icons/128.png)
 
@@ -7,12 +7,12 @@ Chrome, Opera, and Firefox Extension for playing awesome chiptune from keygenmus
 
 It plays mp3 version (not tracker) from mp3 mirror.
 
-It uses [Chrome Extension Box](https://github.com/onikienko/chrome-extensions-box) for Chrome release building (manifest
-v2) and [mv3-parcel-webext-template](https://github.com/onikienko/mv3-parcel-webext-template) for manifest v3.
+It uses [mv3-parcel-webext-template](https://github.com/onikienko/mv3-parcel-webext-template) for manifest v3 builds.
 
 Install for your browser:
 
 - **[Chrome](https://chrome.google.com/webstore/detail/keygenjukebox-play-button/olephdnjkkjiidgifanfiimkbbcaogid)**
+- **[Edge](https://microsoftedge.microsoft.com/addons/detail/hlnobbggafdchjhflhljjklhaepgjgcg)**
 - **[Opera](https://addons.opera.com/extensions/details/keygenjukebox-play-button/)**
 - **[Firefox](https://addons.mozilla.org/addon/keygen-music-play-button/)**
 
@@ -34,7 +34,8 @@ At the moment, there are more than 6 days of non-stop playing :scream:
 
 **Manifest V3**
 
-In the `mv3` folder located the modern manifest v3 implementation. It works only for Chrome. 
+In the `mv3` folder located the modern manifest v3 implementation published in Chrome Web Store and Edge Add-ons.
+It should work in all modern Chromium-based browsers. 
 
 **Firefox versions dev. notes**
 
